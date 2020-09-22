@@ -195,7 +195,6 @@ func main() {
 	}
 
 	fetchFiles(sess, &payload)
-	fmt.Println(len(payload.Files))
 	zipS3Files(payload, sess)
 
 	fmt.Println("DONE")
