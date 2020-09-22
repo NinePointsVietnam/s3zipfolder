@@ -45,15 +45,31 @@ func exitErrorf(msg string, args ...interface{}) {
 func fetchFiles(sess *session.Session, payload *PayLoad) {
 	// Create S3 service client
 	svc := s3.New(sess)
+	var contToken *string = nil
+	bar := progressbar.NewOptions(-1, progressbar.OptionSetWidth(10), progressbar.OptionShowBytes(false), progressbar.OptionSetDescription("Fetching file list"))
+	for {
+		bar.Reset()
+		resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
+			Bucket:            aws.String(payload.Bucket),
+			Prefix:            aws.String(payload.Prefix),
+			ContinuationToken: contToken,
+		})
+		if err != nil {
+			exitErrorf("Unable to list items in bucket %q, %v", payload.Bucket, err)
+		}
 
-	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(payload.Bucket), Prefix: aws.String(payload.Prefix)})
-	if err != nil {
-		exitErrorf("Unable to list items in bucket %q, %v", payload.Bucket, err)
-	}
+		for _, s := range resp.Contents {
+			payload.Files = append(payload.Files, *s.Key)
+		}
 
-	for _, s := range resp.Contents {
-		payload.Files = append(payload.Files, *s.Key)
+		if *resp.IsTruncated == false {
+			break
+		} else {
+			contToken = resp.NextContinuationToken
+		}
+		bar.Add(11)
 	}
+	bar.Clear()
 }
 
 func zipS3Files(payload PayLoad, sess *session.Session) error {
@@ -179,6 +195,7 @@ func main() {
 	}
 
 	fetchFiles(sess, &payload)
+	fmt.Println(len(payload.Files))
 	zipS3Files(payload, sess)
 
 	fmt.Println("DONE")
